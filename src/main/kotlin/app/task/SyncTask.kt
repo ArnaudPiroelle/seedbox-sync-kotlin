@@ -61,6 +61,7 @@ object SyncTask {
         val torrents = provider.getTorrents()
 
         torrents.filter { torrent -> torrent.downloadDir == folder.remoteCompletePath }
+            .filter { torrent ->  torrent.percentDone == 1f }
             .forEach { torrent ->
                 try {
                     downloadTorrent(provider, downloader, folder, torrent)
