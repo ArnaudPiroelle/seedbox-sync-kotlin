@@ -1,0 +1,35 @@
+{
+    "provider": {
+        "type": "transmission",
+        "url": "http://MYADDRESS:MYPORT/transmission/rpc",
+        "username": "MYUSERNAME",
+        "password": "MYPASSWORD"
+    },
+    "downloader": {
+        "type": "ftp",
+        "host": "MY_FTP_HOST",
+        "port": MY_FTP_PORT,
+        "username": "MY_FTP_USERNAME",
+        "password": "MY_FTP_PASSWORD",
+        "root": "/home/seedbox/"
+    },
+    "folders": [
+        {
+            "remoteCompletePath": "/home/seedbox/sickrage",
+            "remoteSharePath": "/home/seedbox",
+            "localTempPath": "/Users/myuser/sync/tmp",
+            "localPostProcessingPath": "/Users/myuser/sync/process"
+        }
+    ],
+    "hooks": [
+        {
+            "event": "sync/pre",
+            "type": "web",
+            "method": "GET",
+            "url": "http://www.google.com"
+        }
+    ],
+    "server": {
+        "cron": "* * * * *"
+    }
+}
