@@ -31,7 +31,7 @@ class Transmission(private val provider: Provider, private val gson: Gson) : Int
 
     suspend fun getTorrents(): List<Torrent> {
         val responseBody = call(TransmissionRequest.TorrentGet).body
-        val torrents = responseBody?.let {
+        val torrents = responseBody?.use {
             gson.fromJson(it.string(), TorrentGetResponse::class.java)
         }
         return torrents?.arguments?.torrents ?: listOf()
