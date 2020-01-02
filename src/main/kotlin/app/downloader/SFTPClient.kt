@@ -20,9 +20,7 @@ class SFTPClient(private val downloader: DownloaderConfig): Downloader {
 
     private val session by lazy {
         val jsch = JSch()
-        val out = "${System.getProperty("user.home")}/.ssh/known_hosts"
-        println(out)
-        jsch.setKnownHosts(out)
+        jsch.setKnownHosts("${System.getProperty("user.home")}/.ssh/known_hosts")
         val jschSession = jsch.getSession(downloader.username, downloader.host, downloader.port)
         jschSession.setPassword(downloader.password)
         jschSession
@@ -55,7 +53,6 @@ class SFTPClient(private val downloader: DownloaderConfig): Downloader {
             localFile.createNewFile()
         }
 
-        println(sftpClient.home)
         val stat = sftpClient.stat(remoteFile)
         val remoteSize = stat.size
         println(file.name)
