@@ -1,7 +1,9 @@
 package app.task
 
 import app.core.HookManager
+import app.downloader.Downloader
 import app.downloader.FTPClient
+import app.downloader.SFTPClient
 import app.model.Configuration
 import app.model.Folder
 import app.model.Torrent
@@ -12,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileReader
-import java.lang.Exception
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -27,7 +28,11 @@ object SyncTask {
 
         val hookManager = HookManager(configuration.hooks)
         val provider = Transmission(configuration.provider, gson)
-        val downloader = FTPClient(configuration.downloader)
+        val downloader = when (configuration.downloader.type) {
+            "ftp" -> FTPClient(configuration.downloader)
+            "sftp" -> SFTPClient(configuration.downloader)
+            else -> throw IllegalStateException("Downloader not implemented yet")
+        }
         val folders = configuration.folders
         // endregion
 
@@ -57,15 +62,15 @@ object SyncTask {
     }
 
 
-    private suspend fun synchronize(provider: Transmission, downloader: FTPClient, folder: Folder) {
+    private suspend fun synchronize(provider: Transmission, downloader: Downloader, folder: Folder) {
         val torrents = provider.getTorrents()
 
         torrents.filter { torrent -> torrent.downloadDir == folder.remoteCompletePath }
-            .filter { torrent ->  torrent.percentDone == 1f }
+            .filter { torrent -> torrent.percentDone == 1f }
             .forEach { torrent ->
                 try {
                     downloadTorrent(provider, downloader, folder, torrent)
-                }catch (e: Exception){
+                } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
@@ -73,7 +78,7 @@ object SyncTask {
 
     private suspend fun downloadTorrent(
         provider: Transmission,
-        downloader: FTPClient,
+        downloader: Downloader,
         folder: Folder,
         torrent: Torrent
     ) {

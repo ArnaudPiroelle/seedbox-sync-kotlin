@@ -1,6 +1,6 @@
 package app.downloader
 
-import app.model.Downloader
+import app.model.DownloaderConfig
 import app.model.TorrentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -14,23 +14,23 @@ import java.io.FileOutputStream
 import java.io.InputStream
 
 
-class FTPClient(private val downloader: Downloader) {
+class FTPClient(private val downloader: DownloaderConfig): Downloader {
 
     private val ftp = FTPSClient()
 
-    fun connect() {
+    override fun connect() {
         ftp.connect(downloader.host, downloader.port)
         ftp.login(downloader.username, downloader.password)
         ftp.setFileType(FTP.BINARY_FILE_TYPE)
         ftp.enterLocalPassiveMode()
     }
 
-    fun disconnect() {
+    override fun disconnect() {
         ftp.logout()
         ftp.disconnect()
     }
 
-    suspend fun download(file: TorrentFile, remoteCompletePath: String, localTempPath: String) =
+    override suspend fun download(file: TorrentFile, remoteCompletePath: String, localTempPath: String) =
         withContext(Dispatchers.IO) {
             val root = downloader.root
             val remotePath = remoteCompletePath.replace(root, "")
