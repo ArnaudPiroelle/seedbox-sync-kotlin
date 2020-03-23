@@ -1,4 +1,4 @@
-FROM arm32v7/openjdk:11
+FROM openjdk:11
 
 WORKDIR /app
 COPY . /app
