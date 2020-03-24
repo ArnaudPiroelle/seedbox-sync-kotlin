@@ -19,6 +19,8 @@ class FTPClient(private val downloader: DownloaderConfig): Downloader {
     private val ftp = FTPSClient()
 
     override fun connect() {
+        ftp.setControlEncoding("UTF-8");
+        ftp.setAutodetectUTF8( true );
         ftp.connect(downloader.host, downloader.port)
         ftp.login(downloader.username, downloader.password)
         ftp.setFileType(FTP.BINARY_FILE_TYPE)
@@ -44,9 +46,9 @@ class FTPClient(private val downloader: DownloaderConfig): Downloader {
                 localFile.parentFile.mkdirs()
                 localFile.createNewFile()
             }
+            println(remoteFile)
             val remoteSize = ftp.mlistFile(remoteFile).size ?: 0
 
-            println(file.name)
             if (localSize >= remoteSize) {
                 return@withContext
             }
