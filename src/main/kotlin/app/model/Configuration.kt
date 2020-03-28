@@ -4,7 +4,8 @@ data class Configuration(
     val provider: Provider,
     val downloader: DownloaderConfig,
     val folders: List<Folder>,
-    val hooks: List<Hook>
+    val hooks: List<Hook>,
+    val scheduler: SchedulerConfig
 )
 
 data class Provider(val url: String, val username: String, val password: String)
@@ -16,3 +17,4 @@ data class DownloaderConfig(
     val password: String,
     val root: String
 )
+data class SchedulerConfig(val cron: String)

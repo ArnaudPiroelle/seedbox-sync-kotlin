@@ -29,7 +29,7 @@
             "url": "http://www.google.com"
         }
     ],
-    "server": {
+    "scheduler": {
         "cron": "* * * * *"
     }
 }
