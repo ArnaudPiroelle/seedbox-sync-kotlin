@@ -1,6 +1,6 @@
 package app.model
 
-class Torrent(
+data class Torrent(
     val id: Long,
     val name: String,
     val percentDone: Float,
@@ -8,10 +8,10 @@ class Torrent(
     val downloadDir: String
 )
 
-class TorrentFile(
+data class TorrentFile(
     val name: String,
     val length: Long,
     val bytesCompleted: Long
 ) {
-
+    fun isComplete(): Boolean = bytesCompleted == length
 }

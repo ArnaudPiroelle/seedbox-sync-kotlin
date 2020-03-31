@@ -29,7 +29,7 @@ class Transmission(private val provider: Provider, private val gson: Gson) : Int
         .connectTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    suspend fun getTorrents(): List<Torrent> {
+    fun getTorrents(): List<Torrent> {
         val responseBody = call(TransmissionRequest.TorrentGet).body
         val torrents = responseBody?.use {
             gson.fromJson(it.string(), TorrentGetResponse::class.java)
@@ -37,11 +37,11 @@ class Transmission(private val provider: Provider, private val gson: Gson) : Int
         return torrents?.arguments?.torrents ?: listOf()
     }
 
-    suspend fun setLocation(torrent: Torrent, remoteSharePath: String) {
+    fun setLocation(torrent: Torrent, remoteSharePath: String) {
         val response = call(TorrentSetLocation(torrent.id, remoteSharePath))
     }
 
-    private suspend fun call(request: TransmissionRequest): Response {
+    private fun call(request: TransmissionRequest): Response {
         val requestBody = when (request) {
             is TransmissionRequest.TorrentGet -> """{
                                           "method": "torrent-get",
@@ -69,7 +69,7 @@ class Transmission(private val provider: Provider, private val gson: Gson) : Int
                 .build()
         )
 
-        return newCall.await()
+        return newCall.execute()
     }
 
     sealed class TransmissionRequest {

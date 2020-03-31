@@ -2,25 +2,21 @@ package app.downloader
 
 import app.model.DownloaderConfig
 import app.model.TorrentFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import me.tongfei.progressbar.ProgressBar
-import me.tongfei.progressbar.ProgressBarStyle
-import okio.*
+import okio.ForwardingSource
+import okio.Source
+import okio.source
 import org.apache.commons.net.ftp.FTP
 import org.apache.commons.net.ftp.FTPSClient
 import java.io.File
-import java.io.FileOutputStream
-import java.io.InputStream
 
 
-class FTPClient(private val downloader: DownloaderConfig): Downloader {
+class FTPClient(private val downloader: DownloaderConfig) : Downloader {
 
     private val ftp = FTPSClient()
 
     override fun connect() {
-        ftp.setControlEncoding("UTF-8");
-        ftp.setAutodetectUTF8( true );
+        ftp.controlEncoding = "UTF-8";
+        ftp.autodetectUTF8 = true;
         ftp.connect(downloader.host, downloader.port)
         ftp.login(downloader.username, downloader.password)
         ftp.setFileType(FTP.BINARY_FILE_TYPE)
@@ -32,62 +28,45 @@ class FTPClient(private val downloader: DownloaderConfig): Downloader {
         ftp.disconnect()
     }
 
-    override suspend fun download(file: TorrentFile, remoteCompletePath: String, localTempPath: String) =
-        withContext(Dispatchers.IO) {
-            val root = downloader.root
-            val remotePath = remoteCompletePath.replace(root, "")
-            val remoteFile = remotePath + "/" + file.name
+    override fun getFile(file: String, resumeAt: Long): Source {
+        ftp.restartOffset = resumeAt
 
-            val localFile = File(localTempPath, file.name)
-            var localSize = 0L
-            if (localFile.exists()) {
-                localSize = localFile.length()
-            } else {
-                localFile.parentFile.mkdirs()
-                localFile.createNewFile()
-            }
-            println(remoteFile)
-            val remoteSize = ftp.mlistFile(remoteFile).size ?: 0
+        val inputStream = ftp.retrieveFileStream(file)
 
-            if (localSize >= remoteSize) {
-                return@withContext
-            }
-
-            ftp.restartOffset = localSize
-
-            val progress = ProgressBar("Progress", remoteSize, ProgressBarStyle.COLORFUL_UNICODE_BLOCK)
-            FileOutputStream(localFile, true).use { out ->
-                out.sink().buffer().use { buffer ->
-                    ftp.retrieveFileStream(remoteFile).use { retrieveFileStream ->
-                        val source = retrieveFileStream.toSourceWithProgress { totalRead ->
-                            val read = localSize + totalRead
-                            progress.stepTo(read)
-                        }
-                        buffer.writeAll(source)
-                        buffer.flush()
+        return object : ForwardingSource(inputStream.source()) {
+            var closed = false
+            override fun close() {
+                if (!closed){
+                    val completePendingCommand = ftp.completePendingCommand()
+                    if (!completePendingCommand) {
+                        IllegalStateException("Transfer failed :(").printStackTrace()
                     }
+                    closed = true
                 }
-                out.flush()
-            }
-            progress.close()
-
-            val completePendingCommand = ftp.completePendingCommand()
-            if (!completePendingCommand) {
-                throw IllegalStateException("Transfer failed :(")
-            }
-
-        }
-
-    private fun InputStream.toSourceWithProgress(function: (Long) -> Unit): Source {
-        return object : ForwardingSource(source()) {
-            var totalBytesRead = 0L
-
-            override fun read(sink: Buffer, byteCount: Long): Long {
-                val bytesRead = super.read(sink, byteCount)
-                totalBytesRead += if (bytesRead != -1L) bytesRead else 0
-                function(totalBytesRead)
-                return bytesRead
+                super.close()
             }
         }
     }
+
+    override fun getLocalSize(file: TorrentFile, localTempPath: String): Long {
+        val localFile = File(localTempPath, file.name)
+
+        return if (localFile.exists()) {
+            localFile.length()
+        } else {
+            0
+        }
+    }
+
+    override fun getRemoteSize(file: TorrentFile, remoteCompletePath: String): Long {
+        val root = downloader.root
+        val remotePath = remoteCompletePath.replace(root, "")
+        val remoteFile = remotePath + "/" + file.name
+        return ftp.mlistFile(remoteFile).size ?: 0
+    }
+
+
+    override fun getRoot(): String = downloader.root
+
+
 }

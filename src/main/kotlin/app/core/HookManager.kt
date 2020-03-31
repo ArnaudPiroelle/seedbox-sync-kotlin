@@ -18,7 +18,7 @@ class HookManager(private val hooks: List<Hook>) {
         .connectTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    suspend fun execute(type: Type) {
+    fun execute(type: Type) {
         val basicType = when (type) {
             Type.SyncPre -> "sync/pre"
             Type.SyncPost -> "sync/post"
@@ -32,11 +32,11 @@ class HookManager(private val hooks: List<Hook>) {
             .forEach { execute(it) }
     }
 
-    private suspend fun execute(hook: Hook) {
+    private fun execute(hook: Hook) {
         val request = Request.Builder()
             .url(hook.url)
             .build()
-        okHttpClient.newCall(request).await()
+        okHttpClient.newCall(request).execute()
     }
 
     fun clean() {

@@ -1,96 +1,118 @@
 package app.task
 
-import app.core.HookManager
 import app.downloader.Downloader
-import app.downloader.FTPClient
-import app.downloader.SFTPClient
-import app.model.Configuration
 import app.model.Folder
 import app.model.Torrent
 import app.model.TorrentFile
+import app.notifier.Notifier
 import app.provider.Transmission
-import com.google.gson.Gson
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import okio.*
 import java.io.File
-import java.io.FileReader
+import java.io.FileOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 
-object SyncTask {
-    suspend operator fun invoke(configFile: String) = withContext(Dispatchers.IO) {
-        println("Synchronization started...")
+class SyncTask(
+    private val downloader: Downloader,
+    private val provider: Transmission,
+    private val folders: List<Folder>,
+    private val notifier: Notifier
+) : Task {
 
-        // region Configuration
-        val gson = Gson()
-        val configuration = gson.fromJson(FileReader(configFile), Configuration::class.java)
+    override fun execute() {
+        notifier.startSynchro()
 
-        val hookManager = HookManager(configuration.hooks)
-        val provider = Transmission(configuration.provider, gson)
-        val downloader = when (configuration.downloader.type) {
-            "ftp" -> FTPClient(configuration.downloader)
-            "sftp" -> SFTPClient(configuration.downloader)
-            else -> throw IllegalStateException("Downloader not implemented yet")
-        }
-        val folders = configuration.folders
-        // endregion
-
-        // region Process
-        hookManager.execute(HookManager.Type.SyncPre)
-        downloader.connect()
         folders.forEach { folder ->
             try {
-                hookManager.execute(HookManager.Type.FolderPre)
+                notifier.startFolder(folder)
                 synchronize(provider, downloader, folder)
-                hookManager.execute(HookManager.Type.FolderPost)
+                notifier.endFolder(folder)
             } catch (e: Exception) {
                 e.printStackTrace()
             }
-
         }
-        downloader.disconnect()
-        hookManager.execute(HookManager.Type.SyncPost)
-        // endregion
 
-        // region Clean
-        provider.clean()
-        hookManager.clean()
-
-        println("Synchronization ended")
-        //endregion
+        notifier.endSynchro()
     }
 
-
-    private suspend fun synchronize(provider: Transmission, downloader: Downloader, folder: Folder) {
+    private fun synchronize(provider: Transmission, downloader: Downloader, folder: Folder) {
         val torrents = provider.getTorrents()
 
         torrents.filter { torrent -> torrent.downloadDir == folder.remoteCompletePath }
             .filter { torrent -> torrent.percentDone == 1f }
             .forEach { torrent ->
                 try {
-                    downloadTorrent(provider, downloader, folder, torrent)
+                    downloadTorrent(folder, torrent)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
     }
 
-    private suspend fun downloadTorrent(
-        provider: Transmission,
-        downloader: Downloader,
-        folder: Folder,
-        torrent: Torrent
-    ) {
-        println(torrent.name)
-
+    private fun downloadTorrent(folder: Folder, torrent: Torrent) {
+        notifier.startTorrent(torrent)
+        var hasError = false
         torrent.files
-            .filter { file -> file.bytesCompleted == file.length }
-            .forEach { file -> downloader.download(file, folder.remoteCompletePath, folder.localTempPath) }
+            .filter { file -> file.isComplete() }
+            .forEach { file ->
+                notifier.startFile(file)
 
-        provider.setLocation(torrent, folder.remoteSharePath)
+                try {
+                    downloadFile(folder, file)
+                } catch (e: Exception) {
+                    hasError = true
+                }
 
-        torrent.files.forEach { file -> moveFile(folder, file) }
+                notifier.endFile(file, !hasError)
+            }
+
+        if (!hasError) {
+            provider.setLocation(torrent, folder.remoteSharePath)
+            torrent.files.forEach { file -> moveFile(folder, file) }
+        }
+
+        notifier.endTorrent(torrent)
+    }
+
+    private fun downloadFile(folder: Folder, file: TorrentFile) {
+        val root: String = downloader.getRoot()
+        val remotePath = folder.remoteCompletePath.replace(root, "")
+        val remoteFile = remotePath + "/" + file.name
+        val localFile = File(folder.localTempPath, file.name)
+
+        val localSize = getLocalSize(file, folder.localTempPath)
+        if (localSize == 0L) {
+            localFile.parentFile.mkdirs()
+            localFile.createNewFile()
+        }
+        val remoteSize = downloader.getRemoteSize(file, folder.remoteCompletePath)
+        if (localSize < remoteSize) {
+            downloader.getFile(remoteFile, localSize).use { inputStream ->
+                FileOutputStream(localFile, true).use { fos ->
+                    fos.sink().buffer().use { bufferedSink ->
+                        inputStream.toSourceWithProgress { bytesRead, totalRead ->
+                            val totalBytesRead = localSize + totalRead
+                            notifier.progressFile(file, bytesRead, totalBytesRead)
+                        }.use { source ->
+                            bufferedSink.writeAll(source)
+                            bufferedSink.flush()
+                        }
+                    }
+                    fos.flush()
+                }
+            }
+        }
+    }
+
+    private fun getLocalSize(file: TorrentFile, localTempPath: String): Long {
+        val localFile = File(localTempPath, file.name)
+
+        return if (localFile.exists()) {
+            localFile.length()
+        } else {
+            0
+        }
     }
 
     private fun moveFile(folder: Folder, file: TorrentFile) {
@@ -106,5 +128,18 @@ object SyncTask {
             oldDirname.deleteRecursively()
         }
     }
-}
 
+    private fun Source.toSourceWithProgress(function: (Long, Long) -> Unit): Source {
+        return object : ForwardingSource(this) {
+            var totalBytesRead = 0L
+
+            override fun read(sink: Buffer, byteCount: Long): Long {
+                val bytesRead = super.read(sink, byteCount)
+                totalBytesRead += if (bytesRead != -1L) bytesRead else 0
+                function(byteCount, totalBytesRead)
+                return bytesRead
+            }
+        }
+    }
+
+}
