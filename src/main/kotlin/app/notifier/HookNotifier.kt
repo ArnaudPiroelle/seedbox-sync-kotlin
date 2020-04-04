@@ -23,9 +23,11 @@ class HookNotifier(private val hookManager: HookManager) : Notifier {
     }
 
     override fun startTorrent(torrent: Torrent) {
+        hookManager.execute(HookManager.Type.DownloadPre)
     }
 
     override fun endTorrent(torrent: Torrent) {
+        hookManager.execute(HookManager.Type.DownloadPost)
     }
 
     override fun startFile(file: TorrentFile) {

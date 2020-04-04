@@ -1,9 +1,9 @@
 package app.core
 
 import app.model.Hook
-import okhttp3.OkHttpClient
-import okhttp3.Request
+import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 class HookManager(private val hooks: List<Hook>) {
@@ -36,7 +36,16 @@ class HookManager(private val hooks: List<Hook>) {
         val request = Request.Builder()
             .url(hook.url)
             .build()
-        okHttpClient.newCall(request).execute()
+        okHttpClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                // Do nothing
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                // Do nothing
+            }
+
+        })
     }
 
     fun clean() {
